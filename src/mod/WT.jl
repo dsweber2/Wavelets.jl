@@ -16,6 +16,8 @@ export
     Dirac,
     Daughter,
     findAveraging,
+    getNScales,
+    getScales,
     show
 
 
@@ -442,16 +444,16 @@ given a CFW object, return a rescaled version of the mother wavelet, in the
 fourier domain. ω is the frequency, which is fftshift-ed. s is the scale 
 variable.
 """
-function Mother(this::CFW{W, T, Morlet, N}, s::Real, nInOctave::Int,
+function Mother(this::CFW{W, T, Morlet, N}, s::Real, sWidth::Real,
                   ω::AbstractArray{<:Real,1}) where {W, T, N}
     constant = this.σ[3]*(π)^(1/4)
-    gauss = exp.(-(this.σ[1].-ω/s).^2/2*nInOctave)
+    gauss = exp.(-(this.σ[1].-ω/s).^2/2/sWidth)
     shift = this.σ[2]*exp.(-1/2*(ω/s).^2)
     daughter = constant .* (gauss .- shift) 
     return normalize(daughter, s, this.normalization)
 end
 
-function Mother(this::CFW{W, T, <:Paul, N}, s::Real, nInOctave::Int,
+function Mother(this::CFW{W, T, <:Paul, N}, s::Real, sWidth::Real,
                   ω::AbstractArray{<:Real,1}) where {W, T, N}
     daughter = zeros(length(ω))
     constant = (2^this.α) / sqrt((this.α) * gamma(2*(this.α)))
@@ -461,7 +463,7 @@ function Mother(this::CFW{W, T, <:Paul, N}, s::Real, nInOctave::Int,
     return normalize(daughter, s, this.normalization)
 end
 
-function Mother(this::CFW{W, T, <:Dog, N}, s::Real, nInOctave::Int,
+function Mother(this::CFW{W, T, <:Dog, N}, s::Real, sWidth::Real,
                   ω::AbstractArray{<:Real,1}) where {W, T, N}
     constant = im^(this.α)*sqrt(gamma((this.α)+1/2))
     polynomial = (ω/s).^(this.α)
@@ -551,6 +553,88 @@ function getUpperBound(c::CFW{W, T, <:Paul, N}, s) where {W,T,N}
     return (c.α + 1) * s
 end
 
+"""
+    nOctaves, nWaveletsInOctave, totalWavelets, sRanges = getNWavelets(n1,c)
+
+utility for understanding the spacing of the wavelets. `sRanges` is a list of the s values used in each octave.
+"""
+function getNWavelets(n1,c)
+    nOctaves = log2(max(n1, 2)) - c.averagingLength
+    n = setn(n1,c)
+    nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
+                                              x^(c.decreasing))) for
+                                 x=1:round(Int, nOctaves)])
+    isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
+    totalWavelets = round(Int, sum(nWaveletsInOctave) + isAve)
+    sRanges = Array{Array{Float64,1},1}(undef,round(Int, nOctaves))
+    if round(nOctaves) < 0
+        return nOctaves, nWaveletsInOctave, totalWavelets, sRanges
+    end
+    sRange = polySpacing(nOctaves, c.decreasing, c.averagingLength, totalWavelets)
+    Δ = diff(sRange)
+    sRange = 2 .^ (sRange)
+    sWidth = [Δ[1]; Δ]
+    return nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth
+end
+
+function polySpacing(nOct, p, aveLength, totalWavelets)
+    samplePoints = 1:totalWavelets
+    s =aveLength; T = totalWavelets; O = nOct
+    # y= a + b*x^(1/p), solve for a and b with 
+    # (x₀,y₀)=(1,aveLength)
+    # (x₁,y₁)=(totalWavelets, nOct +aveLength)
+    a = (s * (T^(1/p) - 1) - O + T^(1/p)) / (T^(1/p) - 1)
+    b = (O - 1) / (T^(1/p) - 1)
+    return a .+ b .* (samplePoints).^(1/p)
+end
+
+function getNScales(n1, c)
+    nOctaves = log2(max(n1, 2)) - c.averagingLength
+    nWaveletsInOctave = reverse([max(1, round(Int,
+                                              c.scalingFactor/x^(c.decreasing)))
+                                 for x = 1:round(Int, nOctaves)])
+    nScales = max(sum(nWaveletsInOctave), 0)
+end
+
+@doc """
+    sj = getScales(n1::Integer, c::CFW)
+since the spacing between wavelets isn't even, getting the actual scales is somewhat tricky
+"""
+function getScales(n1::Integer, c::CFW)
+    nOctaves = log2(max(n1, 2)) - c.averagingLength
+    nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
+                                              x^(c.decreasing))) for
+                                 x=1:round(Int, nOctaves)])
+    sj = zeros(sum(nWaveletsInOctave))
+    for curOctave = 1:round(Int, nOctaves)
+        sRange = (2 .^ (range(0, stop=1, length = nWaveletsInOctave[curOctave]+1) .+
+                        curOctave .+ c.averagingLength .- 1))[1:end-1]
+        ind = (sum(nWaveletsInOctave[1:curOctave-1])+1):sum(nWaveletsInOctave[1:curOctave])
+        @debug "ind = $ind"
+        sj[ind] = sRange
+    end
+    return sj
+end
+
+"""
+
+adjust the length of the signal based on the boundary conditions
+"""
+function setn(n1, c)
+    if boundaryType(c)() == WT.padded
+        base2 = round(Int,log(n1 + 1)/log(2));   # power of 2 nearest to n1
+        n = 2^(base2+1)
+        n = n>>1 + 1
+    elseif boundaryType(c)() == WT.DEFAULT_BOUNDARY
+        # n1+1 rather than just n1 because this is going to be used in an rfft
+        # for real data
+        n = n1 + 1
+    else
+        n= n1>>1 + 1
+    end
+    return n
+end
+
 
 @doc """
       (daughters, ω) = computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=NaN, s0::V=NaN) where {S<:Real,
@@ -573,34 +657,15 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     #     J1 = Int(round(log2(n1 * dt / s0) * c.scalingFactor))
     # end
 
-    # scales from Mallat 1999
-    #sj = s0 * 2.0.^(collect(0:J1)./c.scalingFactor)
-    # Fourier equivalent frequencies
-    #freqs = 1 ./ (fλ .* sj)
-
-    nOctaves = log2(max(n1, 2)) - c.averagingLength
+    nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth = getNWavelets(n1,c)
 
     # padding determines the actual number of elements
-    if boundaryType(c)() == WT.padded
-        base2 = round(Int,log(n1 + 1)/log(2));   # power of 2 nearest to n1
-        n = 2^(base2+1)
-        n = n>>1 + 1
-    elseif boundaryType(c)() == WT.DEFAULT_BOUNDARY
-        # n1+1 rather than just n1 because this is going to be used in an rfft
-        # for real data
-        n = n1 + 1
-    else
-        n= n1>>1 + 1
-    end
+    n = setn(n1,c)
     # indicates whether we should keep a spot for the father wavelet
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
 
 
 
-    nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
-                                              x^(c.decreasing))) for
-                                 x=1:round(Int, nOctaves)])
-    totalWavelets = round(Int, sum(nWaveletsInOctave) + isAve)
     ω, daughters = analyticOrNot(c, n, totalWavelets)
     
 
@@ -611,22 +676,14 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
         return father
     end
 
-    
+    @debug "nWaveletsInOctave =$nWaveletsInOctave"
 
     # daughters = zeros(T, n1+1, totalWavelets)
-    for curOctave = 1:round(Int, nOctaves)
-        nPrevWavelets = isAve + sum(nWaveletsInOctave[1:curOctave-1]) # the 1
-                                                 # is for the averaging wavelet
-        sRange = (2 .^ (range(0, stop=1, length = nWaveletsInOctave[curOctave]+1) .+
-                        curOctave .+ c.averagingLength .- 1))[1:end-1]
-        for (curWave, s) in enumerate(sRange)
-            daughters[:, curWave + nPrevWavelets] = Mother(c, s,
-                                                           nWaveletsInOctave[curOctave],
-                                                           ω)#[1:(n1+1)]
-        end
+    for (curWave, s) in enumerate(sRange)
+        daughters[:,curWave] = Mother(c, s, sWidth[curWave], ω)
     end
     if c.averagingLength > 0 # should we include the father?
-        #println("c = $(c), $(c.averagingType), size(ω)= $(size(ω))")
+        @debug "c = $(c), $(c.averagingType), size(ω)= $(size(ω))"
         daughters[:, 1] = findAveraging(c, ω, c.averagingType)#[1:(n1+1)]
     end
 
@@ -723,9 +780,9 @@ wavelet(c::WaveletClass, t::LiftingTransform, boundary::WaveletBoundary=DEFAULT_
 
 function wavelet(cw::T; s::S=8, boundary::WaveletBoundary=DEFAULT_BOUNDARY,
                  averagingType::A=Father(), averagingLength::Int = 4,
-                 frameBound::S=1, normalization::N=Inf, decreasing::S=1) where {T<:ContinuousWaveletClass,
-                                                                                A<:Average,
-                                                                                S<:Real, N<:Real} 
+                 frameBound=1, normalization::N=Inf, decreasing::S=1) where {T<:ContinuousWaveletClass,
+                                                                          A<:Average,
+                                                                          S<:Real, N<:Real} 
     return CFW(cw,s, boundary, averagingType, averagingLength, S(frameBound),
                normalization, decreasing)
 end

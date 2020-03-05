@@ -1,7 +1,7 @@
 module Transforms
 export  dwt, idwt, dwt!, idwt!,
         wpt, iwpt, wpt!, iwpt!,
-        modwt, imodwt, cwt
+        modwt, imodwt, cwt, icwt
 using ..Util, ..WT
 using FFTW
 
@@ -264,13 +264,6 @@ end
 
 
 
-function getNScales(n1, c)
-    nOctaves = log2(max(n1, 2)) - c.averagingLength
-    nWaveletsInOctave = reverse([max(1, round(Int,
-                                              c.scalingFactor/x^(c.decreasing)))
-                                 for x = 1:round(Int, nOctaves)])
-    nScales = max(sum(nWaveletsInOctave), 0)
-end
 
 function reflect(Y, bt)
     n1 = size(Y, 1)
@@ -384,20 +377,55 @@ cwt(Y::AbstractArray{T}) where T<:Real = cwt(Y,WT.Morlet())
 caveats(Y::AbstractArray{T}) where T<:Real = caveats(Y,WT.Morlet())
 
 """
-icwt(WT::AbstractArray{T}, c::CFW{W}, sj::AbstractArray; dt::S=NaN, dj::V=1/12) where {T<:Complex{Real}, S<:Real, V<:Real, W<:WT.WaveletBoundary}
+    icwt(W::AbstractArray{T}, c::CFW{W}, sj::AbstractArray; dt::S=NaN,
+         dj::V=1/12) where {S<:Real, V<:Real, W<:WT.WaveletBoundary}
+    icwt(W::AbstractArray{T}, c::CFW{W}; dt::S=NaN, s0::S
+         dj::V=1/12) where {T<:Real, S<:Real, V<:Real,
+                            W<:WT.WaveletBoundary} 
+
 
 return the inverse continuous wavelet transform
 """
-function icwt(WT::AbstractArray, c::CFW{W}, sj::AbstractArray; dt::S=NaN, dj::V=1/12) where {S<:Real, V<:Real, W<:WT.WaveletBoundary}
+function icwt(W::AbstractArray, c::CFW, sj::AbstractArray; dt::S=NaN,
+              dj::V=1/12) where {S<:Real, V<:Real} 
+    if isnan(dt) || (dt<0)
+        dt = 1
+    end
+
     # Torrence and Compo (1998), eq. (11)
-    iW = (dj * sqrt(dt) / 0.776 * psi(c, 0)) .* sum((real.(WT) ./ sqrt.(sj)), dims=1)
+    n = WT.setn(size(W,1), c)
+    ω = (0:(n-1))*2π
+    ψ = WT.Mother(c, 1, 1, ω)[1:(end-1)]
+    println("size(sj) = $(size(sj))")
+    println("size(W) = $(size(W))")
+    println("size(ψ) = $(size(ψ))")
+    iW = (dj * sqrt(dt) / 0.776 * psi(c,0)) .* sum((real.(W) ./ sqrt.(sj')), dims=2)
 
     return iW
 end
-cwt(Y::AbstractArray{T}, w::WT.ContinuousWaveletClass, sj::AbstractArray; dt::S=NaN, dj::V=NaN) where {T<:Real, S<:Real, V<:Real} = cwt(Y,CFW(w),sj,dt=dt,dj=dj)
+function icwt(W::AbstractArray, c::CFW; dt::Real=NaN, dj::Real=1/12, J1::Real=NaN)
+
+    fλ = (4*π) / (c.σ[1] + sqrt(2 + c.σ[1]^2))
+    n1 = size(W, 1);
+    # J1 is the total number of elements
+    if isnan(J1) || (J1<0)
+        J1=floor(Int,(log2(n1))*c.scalingFactor);
+    end
+
+    sj =  WT.getScales(n1, c)
+
+    if isnan(dt) || (dt<0)
+        dt = 1
+    end
+
+    return icwt(W, c, sj, dt=dt, dj=1/(c.scalingFactor))
+end
+icwt(Y::AbstractArray, w::WT.ContinuousWaveletClass; dj::T=1/12, dt::S=NaN,
+     s0::V=NaN) where {S<:Real, T<:Real, V<:Real} = icwt(Y,CFW(w))
+icwt(Y::AbstractArray) = icwt(Y,WT.Morlet())
 
 function psi(c::CFW{W}, t::Int64) where W<:WT.WaveletBoundary
-    return π^(-0.25) * exp.(im*c.σ[1]*t - t^2 / 2)
+    return real.(π^(-0.25) * exp.(im*c.σ[1]*t - t^2 / 2))
 end
 
 
