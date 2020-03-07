@@ -33,14 +33,59 @@ plot([daughters2 sum(daughters2,dims=2)])
 daughters4, ξ = Wavelets.computeWavelets(n,Ψ)
 plot([daughters4 sum(daughters4,dims=2)])
 
-waveType = WT.Morlet(5)
-Ψ = wavelet(waveType, s=8.0, decreasing=2.0)
-daughters8, ξ = Wavelets.computeWavelets(n,Ψ)
-plot([daughters8 sum(daughters8,dims=2)],legend=false)
+waveType = WT.dog6
+waveType = WT.paul1
+waveType = WT.Morlet(4.7)
+Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=1)
+nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
+    WT.getNWavelets(n,Ψ)
+nWaveletsInOctave
+totalWavelets
+daughters8, ω = Wavelets.computeWavelets(n,Ψ)
+plt1= plot(abs.([daughters8 sum(daughters8,dims=2)]),legend=false);
+vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves));
+plt2 = plot(abs.([daughters8 sum(daughters8,dims=2)][1:512,:]),legend=false);
+vline!(min.(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), 512));
+plot(plt1,plt2, layout=(2,1))
+effectiveQualityFactors(sRanges)'
+
+plotSpacing(nOctaves, p, Ψ, totalWavelets)
+
+
+scatter!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), fill(.025, Int(Ψ.averagingLength + nOctaves)))
+
+sRanges
+function effectiveQualityFactors(sRanges)    
+    effOct = floor.(Int,log2.(sRanges) .- .0001)
+    return [count(effOct .==ii) for ii=minimum(effOct):maximum(effOct)]
+end
+Ψ.σ[1]
+Ψ.σ[2]
+Ψ.σ[3]
+sum((1:size(daughters8,1)) .*daughters8[:,end]./sum(daughters8[:,end]))
+sRanges
+4π*sRanges[end]/(Ψ.σ[1] + sqrt(2+Ψ.σ[1]^2))
 
 Ψ = wavelet(waveType, s=8.0, decreasing=1.0)
 nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths = WT.getNWavelets(n,Ψ)
-plot(sWidths)
+minimum(sWidths) ./ sWidths
+sWidths
+totalWavelets
+WT.varianceAdjust(Ψ,totalWavelets)
+p =8.0
+for p=1.0:.25:5.0
+    waveType = WT.Morlet(4.5)
+    Ψ = wavelet(waveType, s=8.0, decreasing=p)
+    nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
+        WT.getNWavelets(n,Ψ)
+    vAdj = WT.varianceAdjust(Ψ,totalWavelets)
+    @test vAdj[1] == p
+    @test vAdj[end] == 1
+    @test length(vAdj) == totalWavelets
+end
+plot(1 .+a .*(totalWavelets .- (1:21)).^p)
+plot(minimum(sWidths) ./ sWidths)
+sWidths
 sRanges
 nWaveletsInOctave
 linRange = Array{Array{Float64}}(undef, length(nWaveletsInOctave))
@@ -66,10 +111,20 @@ p = 4; plot(scatter(gathered, 1:length(gathered),xaxis = "log freq", yaxis="inde
 p = 8; plot(scatter(gathered, 1:length(gathered),xaxis = "log freq", yaxis="index", legend=false), scatter(2 .^ gathered,
                                                                                                            1:length(gathered), legend=false),
             scatter(WT.polySpacing(nOctaves,p,Ψ.averagingLength, totalWavelets),
-                    1.0:totalWavelets,legend=false,title="proposed, 'linear'"), 
+                    1.0:totalWavelets,legend=false,xaxis="log freq"), 
             scatter(2 .^(WT.polySpacing(nOctaves,p,Ψ.averagingLength, totalWavelets)),
-                    1:totalWavelets,legend=false,title="proposed exp"),
+                    1:totalWavelets,legend=false,xaxis="freq"),
             layout=4)
+Ψ.averagingLength
+function plotSpacing(nOctaves,p,Ψ,totalWavelets)
+    xVals = WT.polySpacing(nOctaves,p,Ψ.averagingLength, totalWavelets)
+    plt1 = scatter(xVals, 1.0:totalWavelets,legend=false,xaxis="log freq")
+    vline!(Array( Ψ.averagingLength: (Ψ.averagingLength+ nOctaves)))
+    plt2 = scatter(2 .^(xVals), 1:totalWavelets, legend=false, xaxis="freq")
+    #plot(2.^(1:totalWavelets), 1:totalWavelets)
+    #vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength+totalWavelets))
+    plot(plt1, plt2,layout=2)
+end
 
 nOctaves + Ψ.averagingLength+1 -1
 sp = WT.polySpacing(nOctaves,4,Ψ.averagingLength, totalWavelets)

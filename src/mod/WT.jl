@@ -447,7 +447,7 @@ variable.
 function Mother(this::CFW{W, T, Morlet, N}, s::Real, sWidth::Real,
                   ω::AbstractArray{<:Real,1}) where {W, T, N}
     constant = this.σ[3]*(π)^(1/4)
-    gauss = exp.(-(this.σ[1].-ω/s).^2/2/sWidth)
+    gauss = exp.(-(this.σ[1].-ω/s).^2/(sWidth^2))
     shift = this.σ[2]*exp.(-1/2*(ω/s).^2)
     daughter = constant .* (gauss .- shift) 
     return normalize(daughter, s, this.normalization)
@@ -492,7 +492,7 @@ the averaging function. The width is then derived so that it matches the next
 wavelet at 1σ.
 
 For the Morlet wavelet, the distribution is just a Gaussian, so it has variance
-1/s^2 and mean σ[1]*s set the variance so that the averaging function has 1σ at
+1/s^2 and mean σ[1]*s set the variance so that the averaging function has σ/2 at
 the central frequency of the last scale.
 
 For the Paul wavelets, it's a easy calculation to see that the mean of a paul
@@ -505,19 +505,19 @@ will get the scale of the averaging function to be
 `s*gamma((c.α+2)/2)/sqrt(gamma((c.α+1)/2)*(gamma((c.α+3)/2)-gamma((c.α+2)/2)))`
 
 """
-function findAveraging(c::CFW, ω, averagingType::Father)
+function findAveraging(c::CFW, ω, averagingType::Father, sWidth)
     s = 2^(c.averagingLength)
-    s0, ω_shift = locationShift(c, s, ω)
+    s0, ω_shift = locationShift(c, s, ω, sWidth)
     averaging = Mother(c, s0, 1, ω_shift)
 end
 
-function locationShift(c::CFW{W, T, <:Morlet, N}, s, ω) where {W,T,N}
-        s0 = c.σ[1] *s/3
+function locationShift(c::CFW{W, T, <:Morlet, N}, s, ω, sWidth) where {W,T,N}
+        s0 = 3*c.σ[1]/4 *s*sWidth
         ω_shift = ω .+ c.σ[1] * s0
     return (s0, ω_shift)
 end
 
-function locationShift(c::CFW{W, T, <:Dog, N}, s, ω) where {W,T,N}
+function locationShift(c::CFW{W, T, <:Dog, N}, s, ω, sWidth) where {W,T,N}
     s0 = s*gamma((c.α+2)/2) / sqrt(gamma((c.α+1)/2)) * (gamma((c.α+3)/2) -
                                                         gamma((c.α+2)/2))
     μ = sqrt(2)*s0*gamma((c.α+2)/2)/gamma((c.α+1)/2)
@@ -525,7 +525,7 @@ function locationShift(c::CFW{W, T, <:Dog, N}, s, ω) where {W,T,N}
     return (s0, ω_shift)
 end
 
-function locationShift(c::CFW{W, T, <:Paul, N}, s, ω) where {W,T,N}
+function locationShift(c::CFW{W, T, <:Paul, N}, s, ω, sWidth) where {W,T,N}
         s0 = s*sqrt(c.α+1)
         ω_shift = ω .+ (c.α .+ 1) * s0
     return (s0, ω_shift)
@@ -562,7 +562,7 @@ function getNWavelets(n1,c)
     nOctaves = log2(max(n1, 2)) - c.averagingLength
     n = setn(n1,c)
     nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
-                                              x^(c.decreasing))) for
+                                              x^(c.decreasing/4.0))) for
                                  x=1:round(Int, nOctaves)])
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
     totalWavelets = round(Int, sum(nWaveletsInOctave) + isAve)
@@ -570,12 +570,20 @@ function getNWavelets(n1,c)
     if round(nOctaves) < 0
         return nOctaves, nWaveletsInOctave, totalWavelets, sRanges
     end
-    sRange = polySpacing(nOctaves, c.decreasing, c.averagingLength, totalWavelets)
-    Δ = diff(sRange)
-    sRange = 2 .^ (sRange)
-    sWidth = [Δ[1]; Δ]
+    sRange = 2 .^ (polySpacing(nOctaves, c.decreasing, c.averagingLength, totalWavelets))
+    sWidth = varianceAdjust(c,totalWavelets)
     return nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth
 end
+
+function varianceAdjust(this::CFW{W,T, M, N}, totalWavelets) where {W,T,N, M}
+    # increases the width of the wavelets by σ[i] = (1+a(total-i)ᴾ)σₛ
+    # which is a polynomial of order p going from 1 at the highest frequency to 
+    # sqrt(p) at the lowest
+    p = this.decreasing
+    a = (p^.8-1)/(totalWavelets-1)^p
+    1 .+a .*(totalWavelets .- (1:totalWavelets)).^p
+end
+
 
 function polySpacing(nOct, p, aveLength, totalWavelets)
     samplePoints = 1:totalWavelets
@@ -583,8 +591,8 @@ function polySpacing(nOct, p, aveLength, totalWavelets)
     # y= a + b*x^(1/p), solve for a and b with 
     # (x₀,y₀)=(1,aveLength)
     # (x₁,y₁)=(totalWavelets, nOct +aveLength)
-    a = (s * (T^(1/p) - 1) - O + T^(1/p)) / (T^(1/p) - 1)
-    b = (O - 1) / (T^(1/p) - 1)
+    a = s - (O) / (T^(1/p) - 1)
+    b = O / (T^(1/p) - 1)
     return a .+ b .* (samplePoints).^(1/p)
 end
 
@@ -672,7 +680,7 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     # if the nOctaves is small enough there are none not covered by the
     # averaging, just use that
     if round(nOctaves) < 0
-        father = findAveraging(c,ω, c.averagingType)
+        father = findAveraging(c,ω, c.averagingType, sWidth[1])
         return father
     end
 
@@ -684,13 +692,14 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     end
     if c.averagingLength > 0 # should we include the father?
         @debug "c = $(c), $(c.averagingType), size(ω)= $(size(ω))"
-        daughters[:, 1] = findAveraging(c, ω, c.averagingType)#[1:(n1+1)]
+        daughters[:, 1] = findAveraging(c, ω, c.averagingType, sWidth[1])#[1:(n1+1)]
     end
 
     # adjust by the frame bound
     if c.frameBound > 0
         daughters = daughters.*(c.frameBound/norm(daughters, 2))
     end
+    testFourierDomainProperties(daughters, isAve)
     return (daughters, ω)
 end
 
@@ -710,6 +719,25 @@ function analyticOrNot(c::CFW{W, T, <:Union{Morlet, Paul}, N}, n, totalWavelets)
     ω = (0:(n-1))*2π
     daughters = zeros(T, n, totalWavelets)
     return (ω, daughters)
+end
+
+function testFourierDomainProperties(daughters, isAve)
+    lowAprxAnalyt = daughters[1,2]./maximum(daughters[:,2])
+    if lowAprxAnalyt >= .01
+        @warn "the lowest frequency wavelet has more than 1% its max at zero, so it may not be analytic. Think carefully" lowAprxAnalyt
+    end
+    highAprxAnalyt = daughters[end,end]./maximum(daughters[:,2])
+    if highAprxAnalyt >= .01
+        @warn "the highest frequency wavelet has more than 1% its max at the end, so it may not be analytic. Think carefully" highAprxAnalyt
+    end
+
+    netWeight = sum(daughters, dims=2)
+    centralFreqLast = argmax(daughters[:,end])
+    centralFreqFirst = argmax(daughters[:,1+isAve])
+    ratioOfCoverage = maximum(netWeight)/minimum(netWeight[centralFreqFirst:centralFreqLast])
+    if ratioOfCoverage > 2
+        @warn "there are frequencies which are significantly more covered than others, with a ratio of" ratioOfCoverage
+    end
 end
 
 # it's ok to just hand the total size, even if we're not transforming across
