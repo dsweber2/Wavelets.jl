@@ -119,14 +119,14 @@ end
 """
     morl = Morlet(σ::T) where T<: Real
 
-    return the Morlet wavelet with parameter σ, which controls the time-frequency trade-off. As σ goes to zero, all of the information becomes spatial. It is best to choose σ>5, as the wavelets are no longer analytic (try plotting some using the function daughter).
+    return the Morlet wavelet with first central frequency parameter σ, which controls the time-frequency trade-off. As σ goes to zero, all of the information becomes spatial. Default is `` 2π``, and it is recommended that you stay within 3-12. Above this range, the overlap between wavelets becomes impractically small. Below it, the mean subtraction term approaches the magnitude of the wavelet, so they become a sum of Gaussians rather than Gaussians.
 """
 function Morlet(σ::T) where T<:Real
     κσ=exp(-σ^2/2)
     cσ=1. /sqrt(1+κσ^2-2*exp(-3*σ^2/4))
     Morlet(σ,κσ,cσ)
 end
-Morlet() = Morlet(5.8)
+Morlet() = Morlet(2π)
 class(::Morlet) = "Morlet"; name(::Morlet) = "morl"; vanishingmoments(::Morlet)=0
 const morl = Morlet()
 Base.show(io::IO, x::Morlet) = print(io,"Morlet mean $(x.σ)")
@@ -559,7 +559,7 @@ end
 utility for understanding the spacing of the wavelets. `sRanges` is a list of the s values used in each octave.
 """
 function getNWavelets(n1,c)
-    nOctaves = log2(max(n1, 2)) - c.averagingLength
+    nOctaves = getNOctaves(n1,c)
     n = setn(n1,c)
     nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
                                               x^(c.decreasing/4.0))) for
@@ -573,6 +573,17 @@ function getNWavelets(n1,c)
     sRange = 2 .^ (polySpacing(nOctaves, c.decreasing, c.averagingLength, totalWavelets))
     sWidth = varianceAdjust(c,totalWavelets)
     return nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth
+end
+
+
+function getNOctaves(n1,c::CFW{W,T, Morlet, N}) where {W, T, N}
+    # choose the number of octaves so the last mean, which is at s*σ[1]
+    # is 3 standard devations away from the end
+    nOctaves = log2(max(n1*2π/(c.σ[1]+3), 2)) - c.averagingLength
+end
+
+function getNOctaves(n1,c::CFW{W,T, M, N}) where {W, T, N, M}
+    nOctaves = log2(max(n1*2π, 2)) - c.averagingLength - 1
 end
 
 function varianceAdjust(this::CFW{W,T, M, N}, totalWavelets) where {W,T,N, M}
@@ -808,7 +819,7 @@ wavelet(c::WaveletClass, t::LiftingTransform, boundary::WaveletBoundary=DEFAULT_
 
 function wavelet(cw::T; s::S=8, boundary::WaveletBoundary=DEFAULT_BOUNDARY,
                  averagingType::A=Father(), averagingLength::Int = 4,
-                 frameBound=1, normalization::N=Inf, decreasing::S=1) where {T<:ContinuousWaveletClass,
+                 frameBound=1, normalization::N=Inf, decreasing::S=4) where {T<:ContinuousWaveletClass,
                                                                           A<:Average,
                                                                           S<:Real, N<:Real} 
     return CFW(cw,s, boundary, averagingType, averagingLength, S(frameBound),

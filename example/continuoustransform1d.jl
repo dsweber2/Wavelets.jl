@@ -7,9 +7,9 @@ wavelet(WT.morl)
 WT.morl
 wavelet(WT.morl, s=8)
 plotlyjs()
-J=11; n = 2^J
+J=11; n = 2^J+395
 x = testfunction(n,"Bumps")
-EmphasizeFrequencyInfo = WT.Morlet(20)
+EmphasizeFrequencyInfo = WT.Morlet(4.7)
 y = cwt(x, wavelet(WT.morl))
 heatmap(abs.(y)); plot!(x+90,label="")
 y = cwt(x, wavelet(WT.dog1))
@@ -20,6 +20,14 @@ heatmap(abs.(y)); plot!(x+90,label="")
 gr()
 pyplot()
 waveType = WT.Morlet(6)
+
+Ψ = wavelet(WT.Morlet(5))
+daughters, ξ = Wavelets.computeWavelets(n,Ψ)
+plot(daughters,legend=false)
+
+Ψ = wavelet(WT.Morlet(4.4))
+daughters, ξ = Wavelets.computeWavelets(n,Ψ)
+plot([daughters sum(daughters,dims=2)],legend=false)
 
 Ψ = wavelet(waveType, s=1,averagingLength=2)
 daughters1, ξ = Wavelets.computeWavelets(n,Ψ)
@@ -35,10 +43,13 @@ plot([daughters4 sum(daughters4,dims=2)])
 
 waveType = WT.dog6
 waveType = WT.paul1
-waveType = WT.Morlet(4.7)
-Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=1)
+
+waveType = WT.Morlet(5)
+Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=4)
 nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
     WT.getNWavelets(n,Ψ)
+nOctaves
+sRanges
 nWaveletsInOctave
 totalWavelets
 daughters8, ω = Wavelets.computeWavelets(n,Ψ)
@@ -47,8 +58,21 @@ vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves));
 plt2 = plot(abs.([daughters8 sum(daughters8,dims=2)][1:512,:]),legend=false);
 vline!(min.(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), 512));
 plot(plt1,plt2, layout=(2,1))
-effectiveQualityFactors(sRanges)'
+totalWavelets
 
+log2.(sRanges)
+6*2
+Ψ.σ[2]
+k=2; sum((1:2049) .* daughters8[:,k]/sum(daughters8[:,k]))/Ψ.σ[1]
+[argmax(daughters8[:,k])/Ψ.σ[1] for k=1:11]
+Ψ.averagingLength
+6.415
+
+ss = 2^11; sσ = 1.0; (argmax(WT.Mother(Ψ, ss,sσ,ω)), Ψ.σ[1]*ss,ss)
+plot(WT.Mother(Ψ, ss,sσ,ω))
+
+Ψ.σ[1] * 2^(6.415+2)
+effectiveQualityFactors(sRanges)'
 plotSpacing(nOctaves, p, Ψ, totalWavelets)
 
 
@@ -116,8 +140,8 @@ p = 8; plot(scatter(gathered, 1:length(gathered),xaxis = "log freq", yaxis="inde
                     1:totalWavelets,legend=false,xaxis="freq"),
             layout=4)
 Ψ.averagingLength
-function plotSpacing(nOctaves,p,Ψ,totalWavelets)
-    xVals = WT.polySpacing(nOctaves,p,Ψ.averagingLength, totalWavelets)
+function plotSpacing(nOctaves,Ψ,totalWavelets)
+    xVals = WT.polySpacing(nOctaves,Ψ.decreasing,Ψ.averagingLength, totalWavelets)
     plt1 = scatter(xVals, 1.0:totalWavelets,legend=false,xaxis="log freq")
     vline!(Array( Ψ.averagingLength: (Ψ.averagingLength+ nOctaves)))
     plt2 = scatter(2 .^(xVals), 1:totalWavelets, legend=false, xaxis="freq")
