@@ -506,7 +506,7 @@ will get the scale of the averaging function to be
 
 """
 function findAveraging(c::CFW, ω, averagingType::Father, sWidth)
-    s = 2^(c.averagingLength)
+    s = 2^(c.averagingLength-1)
     s0, ω_shift = locationShift(c, s, ω, sWidth)
     averaging = Mother(c, s0, 1, ω_shift)
 end
@@ -565,12 +565,13 @@ function getNWavelets(n1,c)
                                               x^(c.decreasing/4.0))) for
                                  x=1:round(Int, nOctaves)])
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
-    totalWavelets = round(Int, sum(nWaveletsInOctave) + isAve)
-    sRanges = Array{Array{Float64,1},1}(undef,round(Int, nOctaves))
     if round(nOctaves) < 0
+        totalWavelets = 0
+        sRanges = Array{Array{Float64,1},1}(undef,0)
         return nOctaves, nWaveletsInOctave, totalWavelets, sRanges
     end
-    sRange = 2 .^ (polySpacing(nOctaves, c.decreasing, c.averagingLength, totalWavelets))
+    sRange = 2 .^ (polySpacing(nOctaves, c))
+    totalWavelets = round(Int, length(sRange) + isAve)
     sWidth = varianceAdjust(c,totalWavelets)
     return nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth
 end
@@ -596,15 +597,25 @@ function varianceAdjust(this::CFW{W,T, M, N}, totalWavelets) where {W,T,N, M}
 end
 
 
-function polySpacing(nOct, p, aveLength, totalWavelets)
-    samplePoints = 1:totalWavelets
-    s =aveLength; T = totalWavelets; O = nOct
-    # y= a + b*x^(1/p), solve for a and b with 
-    # (x₀,y₀)=(1,aveLength)
-    # (x₁,y₁)=(totalWavelets, nOct +aveLength)
-    a = s - (O) / (T^(1/p) - 1)
-    b = O / (T^(1/p) - 1)
-    return a .+ b .* (samplePoints).^(1/p)
+function polySpacing(nOct, c)
+    a =c.averagingLength; O = nOct
+    p = c.decreasing
+    Q = c.scalingFactor
+    # x is the index, y is the scale
+    # y= aveLength + b*x^(1/p), solve for a and b with 
+    # (x₀,y₀)=(0,aveLength-1)
+    # dy/dx = 1/s, so the Quality factor gives the slope at the last frequency
+    b = (p/Q)^(1/p) * (O+a)^((p-1)/p)
+    # the point x so that the second condition holds
+    lastWavelet = Q * (O+a)/p
+    # the point so that the first wavelet is at a
+    firstWavelet = (a/b)^p
+    # step size so that there are actually Q wavelets in the last octave
+    startOfLastOctave = ((nOct+a-1)/b)^p
+    stepSize = (lastWavelet - startOfLastOctave)/Q
+    samplePoints = range(firstWavelet, stop=lastWavelet, 
+                         step = stepSize)#, length = round(Int, O * Q^(1/p)))
+    return b .* (samplePoints).^(1/p)
 end
 
 function getNScales(n1, c)
@@ -697,9 +708,8 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
 
     @debug "nWaveletsInOctave =$nWaveletsInOctave"
 
-    # daughters = zeros(T, n1+1, totalWavelets)
     for (curWave, s) in enumerate(sRange)
-        daughters[:,curWave] = Mother(c, s, sWidth[curWave], ω)
+        daughters[:,curWave+1] = Mother(c, s, sWidth[curWave], ω)
     end
     if c.averagingLength > 0 # should we include the father?
         @debug "c = $(c), $(c.averagingType), size(ω)= $(size(ω))"
@@ -745,9 +755,17 @@ function testFourierDomainProperties(daughters, isAve)
     netWeight = sum(daughters, dims=2)
     centralFreqLast = argmax(daughters[:,end])
     centralFreqFirst = argmax(daughters[:,1+isAve])
+    println(length(netWeight))
+    println(centralFreqFirst)
+    println(centralFreqLast)
     ratioOfCoverage = maximum(netWeight)/minimum(netWeight[centralFreqFirst:centralFreqLast])
-    if ratioOfCoverage > 2
+    if ratioOfCoverage > 5
         @warn "there are frequencies which are significantly more covered than others, with a ratio of" ratioOfCoverage
+    end
+    minimalRegionComparedToLastPeak = maximum(daughters[:,end]) /
+        minimum(netWeight[centralFreqFirst:centralFreqLast])
+    if minimalRegionComparedToLastPeak > 2
+        @warn "there are wavelets whose peaks are far enough apart that the trough between them is less than half the height of the highest frequency wavelet" minimalRegionComparedToLastPeak
     end
 end
 

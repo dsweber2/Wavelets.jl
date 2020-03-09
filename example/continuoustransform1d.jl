@@ -44,8 +44,8 @@ plot([daughters4 sum(daughters4,dims=2)])
 waveType = WT.dog6
 waveType = WT.paul1
 
-waveType = WT.Morlet(5)
-Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=4)
+waveType = WT.Morlet(4π)
+Ψ = wavelet(waveType, s=8.0, decreasing=4.0,averagingLength=4)
 nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
     WT.getNWavelets(n,Ψ)
 nOctaves
@@ -54,33 +54,50 @@ nWaveletsInOctave
 totalWavelets
 daughters8, ω = Wavelets.computeWavelets(n,Ψ)
 plt1= plot(abs.([daughters8 sum(daughters8,dims=2)]),legend=false);
-vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves));
+#vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves));
 plt2 = plot(abs.([daughters8 sum(daughters8,dims=2)][1:512,:]),legend=false);
-vline!(min.(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), 512));
-plot(plt1,plt2, layout=(2,1))
+#vline!(min.(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), 512));
+plt3 = plot(abs.([ψ₁ sum(ψ₁,dims=2)])[1:n,:],legend=false)
+plt4 = plot(abs.([ψ₁ sum(ψ₁,dims=2)])[1:512,:],legend=false)
+plot(plt1,plt2,plt3, plt4, layout=(4,1))
 totalWavelets
-
-log2.(sRanges)
-6*2
-Ψ.σ[2]
-k=2; sum((1:2049) .* daughters8[:,k]/sum(daughters8[:,k]))/Ψ.σ[1]
-[argmax(daughters8[:,k])/Ψ.σ[1] for k=1:11]
-Ψ.averagingLength
-6.415
-
-ss = 2^11; sσ = 1.0; (argmax(WT.Mother(Ψ, ss,sσ,ω)), Ψ.σ[1]*ss,ss)
-plot(WT.Mother(Ψ, ss,sσ,ω))
 
 Ψ.σ[1] * 2^(6.415+2)
 effectiveQualityFactors(sRanges)'
 plotSpacing(nOctaves, p, Ψ, totalWavelets)
+polySpacing(nOctaves, 4, Ψ.averagingLength, totalWavelets)
+nOctaves
+effectiveQualityFactors(2 .^ (WT.polySpacing(nOctaves,Ψ.decreasing,Ψ.averagingLength,Ψ)))
+WT.polySpacing(nOctaves,Ψ.decreasing,Ψ.averagingLength,Ψ)
+
+p = 3.5; Ψ = wavelet(waveType, s=8.0, decreasing=p, averagingLength=2)
+testQSpacing = WT.polySpacing(nOctaves,Ψ);
+scatter(testQSpacing, 1:length(testQSpacing), legend=:topleft,label="Q")
+testOrigSpacing = polySpacing(nOctaves, p, Ψ.averagingLength, totalWavelets)
+scatter!(testOrigSpacing,1:length(testOrigSpacing),label="orig")
+println(("Q based", effectiveQualityFactors(2 .^(testQSpacing))',
+         length(testQSpacing), minimum(testQSpacing), maximum(testQSpacing)))
+println(("Total based", effectiveQualityFactors(2 .^(testOrigSpacing))', length(testOrigSpacing),minimum(testOrigSpacing), maximum(testOrigSpacing)))
 
 
 scatter!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), fill(.025, Int(Ψ.averagingLength + nOctaves)))
 
 sRanges
-function effectiveQualityFactors(sRanges)    
-    effOct = floor.(Int,log2.(sRanges) .- .0001)
+
+function polySpacing(nOct, p, aveLength, totalWavelets)
+    samplePoints = 1:totalWavelets
+    s =aveLength; T = totalWavelets; O = nOct
+    # y= a + b*x^(1/p), solve for a and b with 
+    # (x₀,y₀)=(1,aveLength)
+    # (x₁,y₁)=(totalWavelets, nOct +aveLength)
+    a = s - (O) / (T^(1/p) - 1)
+    b = O / (T^(1/p) - 1)
+    return a .+ b .* (samplePoints).^(1/p)
+end
+
+function effectiveQualityFactors(testQSpacing)    
+    offInt = log2(testQSpacing[end])%1
+    effOct = ceil.(Int,log2.(testQSpacing) .- offInt)
     return [count(effOct .==ii) for ii=minimum(effOct):maximum(effOct)]
 end
 Ψ.σ[1]
@@ -141,10 +158,10 @@ p = 8; plot(scatter(gathered, 1:length(gathered),xaxis = "log freq", yaxis="inde
             layout=4)
 Ψ.averagingLength
 function plotSpacing(nOctaves,Ψ,totalWavelets)
-    xVals = WT.polySpacing(nOctaves,Ψ.decreasing,Ψ.averagingLength, totalWavelets)
-    plt1 = scatter(xVals, 1.0:totalWavelets,legend=false,xaxis="log freq")
-    vline!(Array( Ψ.averagingLength: (Ψ.averagingLength+ nOctaves)))
-    plt2 = scatter(2 .^(xVals), 1:totalWavelets, legend=false, xaxis="freq")
+    xVals = polySpacing(nOctaves,Ψ.decreasing,Ψ.averagingLength, totalWavelets)
+    plt1 = scatter(xVals, 1.0:totalWavelets,legend=false, xaxis="log freq")
+    vline!(Array( Ψ.averagingLength: (Ψ.averagingLength + nOctaves)))
+    plt2 = scatter(Ψ.σ[1]*2 .^(xVals), 1:totalWavelets, legend=false, xaxis="freq")
     #plot(2.^(1:totalWavelets), 1:totalWavelets)
     #vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength+totalWavelets))
     plot(plt1, plt2,layout=2)
