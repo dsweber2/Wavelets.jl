@@ -16,7 +16,7 @@ export
     Dirac,
     Daughter,
     findAveraging,
-    getNScales,
+    getNWavelets,
     getScales,
     show
 
@@ -554,9 +554,11 @@ function getUpperBound(c::CFW{W, T, <:Paul, N}, s) where {W,T,N}
 end
 
 """
-    nOctaves, nWaveletsInOctave, totalWavelets, sRanges = getNWavelets(n1,c)
+    nOctaves, totalWavelets, sRanges, sWidth = getNWavelets(n1,c)
 
-utility for understanding the spacing of the wavelets. `sRanges` is a list of the s values used in each octave.
+utility for understanding the spacing of the wavelets. `sRanges` is a list of
+the s values used in each octave. sWidth is a list of the corresponding
+variance adjustments
 """
 function getNWavelets(n1,c)
     nOctaves = getNOctaves(n1,c)
@@ -750,10 +752,8 @@ function testFourierDomainProperties(daughters, isAve)
     netWeight = sum(daughters, dims=2)
     centralFreqLast = argmax(daughters[:,end])
     centralFreqFirst = argmax(daughters[:,1+isAve])
-    println(length(netWeight))
-    println(centralFreqFirst)
-    println(centralFreqLast)
-    ratioOfCoverage = maximum(netWeight)/minimum(netWeight[centralFreqFirst:centralFreqLast])
+    ratioOfCoverage = maximum(netWeight) /
+        minimum(netWeight[centralFreqFirst:centralFreqLast]) 
     if ratioOfCoverage > 5
         @warn "there are frequencies which are significantly more covered than others, with a ratio of" ratioOfCoverage
     end

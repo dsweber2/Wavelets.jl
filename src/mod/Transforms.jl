@@ -173,7 +173,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan::Abs
     end
     n1 = size(Y, 1);
     
-    nScales = getNScales(n1, c)
+    _, nScales, _ = getNWavelets(n1, c)
     #....construct time series to analyze, pad if necessary
     x = reflect(Y, boundaryType(c)()) #this function is defined below
 
@@ -224,7 +224,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan =
 
     n1 = size(Y, 1);
     
-    nScales = getNScales(n1, c)
+    _, nScales, _ = getNWavelets(n1, c)
     #....construct time series to analyze, pad if necessary
     x = reflect(Y, boundaryType(c)())
 
@@ -311,6 +311,7 @@ end
 function actuallyTransform!(wave, daughters, x̂, rfftPlan, analytic::Union{<:WT.Dog})
     outer = axes(x̂)[2:end]
     n1 = size(x̂, 1)
+    @info "" size(daughters)
     for j in 1:size(daughters,2)
         wave[1:n1, outer..., j] = x̂ .* daughters[:,j]
         wave[:, outer..., j] = rfftPlan \ (wave[1:n1, outer..., j])  # wavelet transform

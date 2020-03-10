@@ -276,11 +276,6 @@ y = copy(x)
                     else
                         @test Array{Float64,2}==typeof(yc)
                     end
-                    nOctaves = log2(xSize) - wfc.averagingLength; 
-                    nWaveletsInOctave = reverse([max(1, round(Int, s / x^(1))) for
-                                                 x=1:round(Int, nOctaves)])
-                    totalWavelets = round(Int, sum(nWaveletsInOctave))
-                    @test size(yc) == (xSize, totalWavelets+1)
                 end
             end
         end
