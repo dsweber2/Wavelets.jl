@@ -8,6 +8,7 @@ WT.morl
 wavelet(WT.morl, s=8)
 plotlyjs()
 J=11; n = 2^J+395
+n = 641
 x = testfunction(n,"Bumps")
 EmphasizeFrequencyInfo = WT.Morlet(4.7)
 y = cwt(x, wavelet(WT.morl))
@@ -44,8 +45,9 @@ plot([daughters4 sum(daughters4,dims=2)])
 waveType = WT.dog6
 waveType = WT.paul1
 
-waveType = WT.Morlet(4π)
-Ψ = wavelet(waveType, s=8.0, decreasing=4.0,averagingLength=4)
+n=321
+waveType = WT.Morlet(2π)
+Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=4)
 nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
     WT.getNWavelets(n,Ψ)
 nOctaves
@@ -55,12 +57,13 @@ totalWavelets
 daughters8, ω = Wavelets.computeWavelets(n,Ψ)
 plt1= plot(abs.([daughters8 sum(daughters8,dims=2)]),legend=false);
 #vline!(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves));
-plt2 = plot(abs.([daughters8 sum(daughters8,dims=2)][1:512,:]),legend=false);
+#plt2 = plot(abs.([daughters8 sum(daughters8,dims=2)][1:512,:]),legend=false);
 #vline!(min.(2 .^ (Ψ.averagingLength:Ψ.averagingLength + nOctaves), 512));
+ψ₁,ψ₂,ϕ₃,σξ = filter_bank(n,computeJ(n),4);
 plt3 = plot(abs.([ψ₁ sum(ψ₁,dims=2)])[1:n,:],legend=false)
-plt4 = plot(abs.([ψ₁ sum(ψ₁,dims=2)])[1:512,:],legend=false)
+#plt4 = plot(abs.([ψ₁ sum(ψ₁,dims=2)])[1:512,:],legend=false)
 plot(plt1,plt2,plt3, plt4, layout=(4,1))
-totalWavelets
+(totalWavelets, size(ψ₁,2))
 
 Ψ.σ[1] * 2^(6.415+2)
 effectiveQualityFactors(sRanges)'

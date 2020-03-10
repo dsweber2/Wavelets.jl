@@ -561,19 +561,16 @@ utility for understanding the spacing of the wavelets. `sRanges` is a list of th
 function getNWavelets(n1,c)
     nOctaves = getNOctaves(n1,c)
     n = setn(n1,c)
-    nWaveletsInOctave = reverse([max(1, round(Int, c.scalingFactor /
-                                              x^(c.decreasing/4.0))) for
-                                 x=1:round(Int, nOctaves)])
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
     if round(nOctaves) < 0
         totalWavelets = 0
         sRanges = Array{Array{Float64,1},1}(undef,0)
-        return nOctaves, nWaveletsInOctave, totalWavelets, sRanges
+        return nOctaves, totalWavelets, sRanges
     end
     sRange = 2 .^ (polySpacing(nOctaves, c))
     totalWavelets = round(Int, length(sRange) + isAve)
     sWidth = varianceAdjust(c,totalWavelets)
-    return nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth
+    return nOctaves, totalWavelets, sRange, sWidth
 end
 
 
@@ -687,7 +684,7 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     #     J1 = Int(round(log2(n1 * dt / s0) * c.scalingFactor))
     # end
 
-    nOctaves, nWaveletsInOctave, totalWavelets, sRange, sWidth = getNWavelets(n1,c)
+    nOctaves, totalWavelets, sRange, sWidth = getNWavelets(n1,c)
 
     # padding determines the actual number of elements
     n = setn(n1,c)
@@ -705,8 +702,6 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
         father = findAveraging(c,ω, c.averagingType, sWidth[1])
         return father
     end
-
-    @debug "nWaveletsInOctave =$nWaveletsInOctave"
 
     for (curWave, s) in enumerate(sRange)
         daughters[:,curWave+1] = Mother(c, s, sWidth[curWave], ω)
@@ -835,11 +830,12 @@ wavelet(c::OrthoWaveletClass, t::FilterTransform, boundary::WaveletBoundary=DEFA
 wavelet(c::WaveletClass, t::LiftingTransform, boundary::WaveletBoundary=DEFAULT_BOUNDARY) = GLS(c, boundary)
 
 
-function wavelet(cw::T; s::S=8, boundary::WaveletBoundary=DEFAULT_BOUNDARY,
+function wavelet(cw::T; s::S=8.0, boundary::WaveletBoundary=DEFAULT_BOUNDARY,
                  averagingType::A=Father(), averagingLength::Int = 4,
-                 frameBound=1, normalization::N=Inf, decreasing::S=4) where {T<:ContinuousWaveletClass,
+                 frameBound=1, normalization::N=Inf, decreasing=4) where {T<:ContinuousWaveletClass,
                                                                           A<:Average,
                                                                           S<:Real, N<:Real} 
+    decreasing = S(decreasing)
     return CFW(cw,s, boundary, averagingType, averagingLength, S(frameBound),
                normalization, decreasing)
 end
