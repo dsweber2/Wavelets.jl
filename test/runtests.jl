@@ -2,6 +2,7 @@ using Wavelets
 using Test
 using LinearAlgebra
 using DelimitedFiles
+using Logging
 
 # modified from Base.Test
 function vecnorm_eq(va, vb, Eps, astr="a", bstr="b")

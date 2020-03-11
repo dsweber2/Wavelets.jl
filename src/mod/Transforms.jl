@@ -174,6 +174,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan::Abs
     n1 = size(Y, 1);
     
     _, nScales, _ = getNWavelets(n1, c)
+    @debug nScales
     #....construct time series to analyze, pad if necessary
     x = reflect(Y, boundaryType(c)()) #this function is defined below
 
@@ -196,7 +197,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan::Abs
 
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: WT.NoAve)) ? 1 : 0
 
-    wave = zeros(Complex{T}, size(x)..., nScales + isAve);  # result array;
+    wave = zeros(Complex{T}, size(x)..., nScales);  # result array;
     # faster if we put the example index on the outside loop through all scales
     # and compute transform
     actuallyTransform!(wave, daughters,x̂, fftPlan, c.waveType, c.averagingType)
@@ -236,7 +237,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan =
 
     # If the vector isn't long enough to actually have any other scales, just
     # return the averaging. Or if there's only averaging
-    if nScales <= 0 || size(daughters,2) == 1
+    if nScales <= 1 || size(daughters,2) == 1
         daughters = daughters[:,1:1]
         nScales = 0
     end
@@ -245,7 +246,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan =
     
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: WT.NoAve)) ? 1 : 0
 
-    wave = zeros(Complex{T}, size(x)..., nScales + isAve);  # result array;
+    wave = zeros(Complex{T}, size(x)..., nScales);  # result array;
     # faster if we put the example index on the outside loop through all scales
     # and compute transform
 
@@ -300,8 +301,7 @@ function actuallyTransform!(wave, daughters, x̂, fftPlan, analytic::Union{<:WT.
                             averagingType::WT.NoAve)
     outer = axes(x̂)[2:end]
     n1 = size(x̂, 1)
-    # the averaging function isn't analytic, so we need to do both positive and
-    # negative frequencies
+    # the no averaging version
     for j in 1:size(daughters,2)
         wave[1:n1, outer..., j] = x̂ .* daughters[:,j]
         wave[:, outer..., j] = fftPlan \ (wave[:, outer..., j])  # wavelet transform
@@ -311,7 +311,6 @@ end
 function actuallyTransform!(wave, daughters, x̂, rfftPlan, analytic::Union{<:WT.Dog})
     outer = axes(x̂)[2:end]
     n1 = size(x̂, 1)
-    @info "" size(daughters)
     for j in 1:size(daughters,2)
         wave[1:n1, outer..., j] = x̂ .* daughters[:,j]
         wave[:, outer..., j] = rfftPlan \ (wave[1:n1, outer..., j])  # wavelet transform
@@ -320,9 +319,9 @@ end
 
 
 
-function cwt(Y::AbstractArray{T}, c::CFW{W}; J1::Int64=-1, dt::S=NaN, s0::V=NaN) where {T<:Number, S<:Real, V<: Real,
+function cwt(Y::AbstractArray{T}, c::CFW{W}; varArgs...) where {T<:Number, S<:Real, V<: Real,
                                                                                         W<:WT.WaveletBoundary}
-    daughters,ω = computeWavelets(size(Y, 1), c; J1=J1, dt=dt, s0=s0) 
+    daughters,ω = computeWavelets(size(Y, 1), c; varArgs...) 
     return cwt(Y, c, daughters)
 end
 

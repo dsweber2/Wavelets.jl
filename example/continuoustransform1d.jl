@@ -48,8 +48,10 @@ waveType = WT.paul1
 n=321
 waveType = WT.Morlet(2π)
 Ψ = wavelet(waveType, s=4.0, decreasing=4.0,averagingLength=4)
-nOctaves, nWaveletsInOctave, totalWavelets, sRanges, sWidths =
+nOctaves, totalWavelets, sRanges, sWidths =
     WT.getNWavelets(n,Ψ)
+totalWavelets
+size(cwt(randn(n,5), Ψ, daughters8))
 nOctaves
 sRanges
 nWaveletsInOctave

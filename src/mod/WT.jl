@@ -386,13 +386,12 @@ refers to which p-norm is preserved as the scale changes. `normalization==2` is
 the default scaling, while `normalization==Inf` gives all the same maximum
 value, thus acting more like windows.
 """
-function CFW(wave::WC, scalingFactor::S=8, boundary::T=WT.DEFAULT_BOUNDARY,
+function CFW(wave::WC, scalingFactor=8, boundary::T=WT.DEFAULT_BOUNDARY,
              averagingType::A = NoAve(),
              averagingLength::Int = 0,
-             frameBound::S=S(-1), normalization::N=Inf, decreasing::S=S(1)) where {WC<:WaveletClass, A <: Average,
-                                                                                  T<:WaveletBoundary,
-                                                                                  S<:Real,
-                                                                                  N<:Real}
+             frameBound=-1, normalization::N=Inf, 
+             decreasing=1) where {WC<:WaveletClass, A <: Average,
+                                  T <: WaveletBoundary, N <: Real}
     @assert scalingFactor > 0
     @assert normalization >= 1
     nameWavelet = name(wave)[1:3]
@@ -406,15 +405,17 @@ function CFW(wave::WC, scalingFactor::S=8, boundary::T=WT.DEFAULT_BOUNDARY,
     else
         error("I'm not sure how you got here. Apparently the WaveletClass you gave doesn't have a name. Sorry about that")
     end
-    if any([!(eltype(tdef)<:Int) for t in tdef])
-        newType = Float64
-    end
     if averagingLength <= 0 || typeof(averagingType) <: NoAve
         averagingLength = 0
         averagingType = NoAve()
     end
-    return CFW{T, newType, WC, N}(scalingFactor, decreasing, tdef..., averagingLength,
-                              averagingType, frameBound, normalization)
+    # S is the most permissive type of the listed variables
+    S = promote_type(typeof(scalingFactor), typeof(decreasing),
+                     typeof(frameBound), typeof(normalization),
+                     typeof(tdef[1]), typeof(tdef[2]))
+    return CFW{T, S, WC, N}(S(scalingFactor), S(decreasing), tdef...,
+                            averagingLength, averagingType, S(frameBound),
+                            S(normalization))
 end
 name(s::CFW) = name(s.waveType)
 
@@ -835,8 +836,14 @@ function wavelet(cw::T; s::S=8.0, boundary::WaveletBoundary=DEFAULT_BOUNDARY,
                  frameBound=1, normalization::N=Inf, decreasing=4) where {T<:ContinuousWaveletClass,
                                                                           A<:Average,
                                                                           S<:Real, N<:Real} 
-    decreasing = S(decreasing)
-    return CFW(cw,s, boundary, averagingType, averagingLength, S(frameBound),
+    if typeof(s) <: AbstractFloat
+        decreasing = S(decreasing)
+    end
+    if typeof(decreasing) <: AbstractFloat
+        s = typeof(decreasing)(s)
+    end
+
+    return CFW(cw,s, boundary, averagingType, averagingLength, frameBound,
                normalization, decreasing)
 end
 

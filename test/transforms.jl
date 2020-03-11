@@ -267,14 +267,26 @@ y = copy(x)
 @testset "Continuous Wavelet Transform" begin
     for xSize = (33, 67)
         for boundary = (WT.DEFAULT_BOUNDARY, WT.padded, WT.NaivePer)
-            for s=1:2:8
-                for wfc in (wavelet(WT.morl,s=s,boundary=boundary), wavelet(WT.dog0,s=s,boundary=boundary), wavelet(WT.paul4,s=s,boundary=boundary))
-                    xc = rand(Float64,xSize)
-                    yc = cwt(xc,wfc)
-                    if typeof(wfc.waveType) <: Union{WT.Morlet, WT.Paul}
-                        @test Array{ComplexF64,2}==typeof(yc)
-                    else
-                        @test Array{Float64,2}==typeof(yc)
+            for s=[1, 2, 3.5, 8, 16]
+                for decreasing = [1, 1.5,4.0]
+                    for wfc in (wavelet(WT.morl,s=s,boundary=boundary,
+                                        decreasing=decreasing),
+                                wavelet(WT.dog0,s=s,boundary=boundary),
+                                wavelet(WT.paul4,s=s,boundary=boundary)) 
+                        xc = rand(Float64,xSize)
+                        # the sizes are of course broken at this size, so no warnings needed
+                        yc = 3
+                        with_logger(ConsoleLogger(stderr, Logging.Error)) do
+                            yc = cwt(xc, wfc)
+                        end
+                        if typeof(wfc.waveType) <: Union{WT.Morlet, WT.Paul}
+                            @test Array{ComplexF64, 2}==typeof(yc)
+                        else
+                            @test Array{Float64, 2}==typeof(yc)
+                        end
+                        nOctaves, totalWavelets, sRanges, sWidths =
+                            WT.getNWavelets(xSize,wfc)
+                        @test totalWavelets == size(yc, 2)
                     end
                 end
             end
