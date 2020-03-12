@@ -174,7 +174,7 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan::Abs
     n1 = size(Y, 1);
     
     _, nScales, _ = getNWavelets(n1, c)
-    @debug nScales
+    @debug "" nScales
     #....construct time series to analyze, pad if necessary
     x = reflect(Y, boundaryType(c)()) #this function is defined below
 
@@ -192,10 +192,8 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan::Abs
     # return the averaging
     if nScales <= 0 || size(daughters,2) == 1
         daughters = daughters[:,1:1]
-        nScales = 0
+        nScales = 1
     end
-
-    isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: WT.NoAve)) ? 1 : 0
 
     wave = zeros(Complex{T}, size(x)..., nScales);  # result array;
     # faster if we put the example index on the outside loop through all scales
@@ -239,13 +237,11 @@ function cwt(Y::AbstractArray{T,N}, c::CFW{W, S, WaTy}, daughters, rfftPlan =
     # return the averaging. Or if there's only averaging
     if nScales <= 1 || size(daughters,2) == 1
         daughters = daughters[:,1:1]
-        nScales = 0
+        nScales = 1
     end
 
     x̂ = rfftPlan * x
     
-    isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: WT.NoAve)) ? 1 : 0
-
     wave = zeros(Complex{T}, size(x)..., nScales);  # result array;
     # faster if we put the example index on the outside loop through all scales
     # and compute transform
@@ -288,7 +284,8 @@ function actuallyTransform!(wave, daughters, x̂, fftPlan, analytic::Union{<:WT.
     # the averaging function isn't analytic, so we need to do both positive and
     # negative frequencies
     tmpWave = x̂ .* daughters[:,1]
-    wave[(n1+1):end, outer..., 1] = reverse(conj.(tmpWave[2:end-isSourceOdd, outer...]),dims=1)
+    wave[(n1+1):end, outer..., 1] = reverse(conj.(tmpWave[2:end-isSourceOdd,
+                                                          outer...]),dims=1)
     wave[1:n1, outer..., 1] = tmpWave
     wave[:, outer..., 1] = fftPlan \ (wave[:, outer..., 1])  # wavelet transform
     for j in 2:size(daughters,2)
