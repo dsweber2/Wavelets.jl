@@ -568,7 +568,8 @@ function getNWavelets(n1,c)
     if round(nOctaves) < 0
         totalWavelets = 0
         sRanges = Array{Array{Float64,1},1}(undef,0)
-        return nOctaves, totalWavelets, sRanges
+        sWidth = Array{Array{Float64,1},1}(undef,0)
+        return nOctaves, totalWavelets, sRanges, sWidth
     end
     sRange = 2 .^ (polySpacing(nOctaves, c))
     totalWavelets = round(Int, length(sRange) + isAve)
