@@ -534,8 +534,8 @@ end
 
 # dirac version (that is, just a window around zero)
 function findAveraging(c::CFW{<:WaveletBoundary, T}, ω,
-                       averagingType::Dirac) where {T}
-    s = 2^(c.averagingLength)
+                       averagingType::Dirac, sWidth) where {T}
+    s = 2^(c.averagingLength) * sWidth
     averaging = zeros(T, size(ω))
     upperBound = getUpperBound(c, s)
     averaging[abs.(ω) .<= upperBound] .= 1
@@ -568,7 +568,7 @@ function getNWavelets(n1,c)
     if round(nOctaves) < 0
         totalWavelets = 0
         sRanges = Array{Array{Float64,1},1}(undef,0)
-        sWidth = Array{Array{Float64,1},1}(undef,0)
+        sWidth = [1.0]
         return nOctaves, totalWavelets, sRanges, sWidth
     end
     sRange = 2 .^ (polySpacing(nOctaves, c))
@@ -694,7 +694,7 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     n = setn(n1,c)
     # indicates whether we should keep a spot for the father wavelet
     isAve = (c.averagingLength > 0 && !(typeof(c.averagingType) <: NoAve)) ? 1 : 0
-
+    # I guess matlab did occasionally do something useful
 
 
     ω, daughters = analyticOrNot(c, n, totalWavelets)
@@ -704,13 +704,13 @@ function computeWavelets(n1::Integer, c::CFW{W}; T=Float64, J1::Int64=-1, dt::S=
     # averaging, just use that
     if round(nOctaves) < 0
         father = findAveraging(c,ω, c.averagingType, sWidth[1])
-        return father
+        return father, ω
     end
 
     for (curWave, s) in enumerate(sRange)
-        daughters[:,curWave+1] = Mother(c, s, sWidth[curWave], ω)
+        daughters[:,curWave+isAve] = Mother(c, s, sWidth[curWave], ω)
     end
-    if c.averagingLength > 0 # should we include the father?
+    if isAve>0 # should we include the father?
         @debug "c = $(c), $(c.averagingType), size(ω)= $(size(ω))"
         daughters[:, 1] = findAveraging(c, ω, c.averagingType, sWidth[1])#[1:(n1+1)]
     end
