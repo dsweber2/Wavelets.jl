@@ -26,9 +26,10 @@ waveType = WT.Morlet(6)
 daughters, ξ = Wavelets.computeWavelets(n,Ψ)
 plot(daughters,legend=false)
 
-Ψ = wavelet(WT.Morlet(4.4))
+Ψ = wavelet(WT.Morlet(2π),decreasing=3.0, averagingLength=2)
 daughters, ξ = Wavelets.computeWavelets(n,Ψ)
 plot([daughters sum(daughters,dims=2)],legend=false)
+size(daughters)
 
 Ψ = wavelet(waveType, s=1,averagingLength=2)
 daughters1, ξ = Wavelets.computeWavelets(n,Ψ)
